@@ -1,6 +1,13 @@
 package com.example.gcielniak.androidwifiscanner;
 
 import android.app.Activity;
+import android.app.ListActivity;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothAdapter.LeScanCallback;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
+import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.ScanCallback;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -29,6 +36,7 @@ public class MainActivity extends Activity {
     WifiScanReceiver wifiReciever;
     File log_file;
     FileWriter log_writer;
+    BluetoothLeScanner bt_scanner;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,34 +49,39 @@ public class MainActivity extends Activity {
         wifi.startScan();
         log_file = new File(Environment.getExternalStoragePublicDirectory(
                 Environment.DIRECTORY_DOWNLOADS), "wifi_log.txt");
+
+        // Initializes Bluetooth adapter.
+        final BluetoothManager bluetoothManager =
+                (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+        bt_scanner = bluetoothManager.getAdapter().getBluetoothLeScanner();
+        bt_scanner.startScan(mScanCallback);
     }
+
+    private ScanCallback mScanCallback = new ScanCallback() {
+        @Override
+        public void onScanResult(int callbackType, android.bluetooth.le.ScanResult result) {
+            Log.i("result", result.getDevice() + " " + result.getRssi());
+        }
+
+        @Override
+        public void onBatchScanResults(List<android.bluetooth.le.ScanResult> results) {
+            for (android.bluetooth.le.ScanResult sr : results) {
+                Log.i("ScanResult - Results", sr.toString());
+            }
+        }
+
+        @Override
+        public void onScanFailed(int errorCode) {
+            Log.e("Scan Failed", "Error Code: " + errorCode);
+        }
+    };
 
     protected void onPause() {
         unregisterReceiver(wifiReciever);
-        try
-        {
-            log_writer.close();
-            MediaScannerConnection.scanFile(this,
-                    new String[] { log_file.toString() },
-                    null,
-                    null);
-        }
-        catch (java.io.IOException exc)
-        {
-            Log.e("MainActivity","Error writing to file.");
-        }
         super.onPause();
     }
 
     protected void onResume() {
-        try
-        {
-            log_writer = new FileWriter(log_file, true);
-        }
-        catch (java.io.IOException exc)
-        {
-            Log.e("MainActivity","Error writing to file.");
-        }
         registerReceiver(wifiReciever, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
         super.onResume();
     }
@@ -105,7 +118,8 @@ public class MainActivity extends Activity {
 
             try
             {
-                log_writer.write(sdf.format(new Date()));
+                log_writer = new FileWriter(log_file, true);
+                log_writer.write(sdf.format(new Date()) + ": ");
             }
             catch (java.io.IOException exc)
             {
@@ -119,7 +133,7 @@ public class MainActivity extends Activity {
                 Log.i("MainActivity", wifis[i]);
                 try
                 {
-                    log_writer.write(wifis[i]);
+                    log_writer.write(wifis[i] + ", ");
                 }
                 catch (java.io.IOException exc)
                 {
@@ -129,7 +143,7 @@ public class MainActivity extends Activity {
             try
             {
                 log_writer.write("\n");
-                log_writer.flush();
+                log_writer.close();
             }
             catch (java.io.IOException exc)
             {
